@@ -1,5 +1,6 @@
 def main():
     import torch
+    from attention import SelfAttention 
     
     inputs = torch.tensor(
         [[0.43, 0.15, 0.89],
@@ -10,18 +11,14 @@ def main():
          [0.05, 0.80, 0.55]]
     )
 
-    attn_scores = inputs @ inputs.T
+    d_in = inputs.shape[1]
+    d_out = 2
 
-    print(f"scores: {attn_scores}\n")
-    
-    attn_weights = torch.nn.functional.softmax(attn_scores, dim=-1)
+    torch.manual_seed(789)
+    attn = SelfAttention(d_in, d_out)
 
-    print(f"weigths: {attn_weights}\n")
+    print(attn(inputs))
 
-    context_vecs = attn_weights @ inputs
-
-    print("contexts:", context_vecs)
-            
 
 if __name__ == "__main__":
    main()
