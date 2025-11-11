@@ -11,3 +11,4 @@ This project is licensed under the [MIT License].
 ## References
 
 - [Build a Large Language Model (From Scratch)](https://sebastianraschka.com/llms-from-scratch/)
+- [Attention Is All You Need](https://arxiv.org/abs/1706.03762)
