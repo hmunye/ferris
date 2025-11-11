@@ -33,15 +33,15 @@ class MultiHeadAttention(nn.Module):
             ),  # upper triangular matrix
         )
 
-    def forward(self, input):
+    def forward(self, x):
         # Batch size, number of tokens, and the input dimension.
-        b, num_tokens, d_in = input.shape
+        b, num_tokens, d_in = x.shape
 
         # Project the input sequence into queries, keys, and values using the
         # respective weights.
-        k = self.w_k(input)  # shape: (b, num_tokens, d_out)
-        q = self.w_q(input)  # shape: (b, num_tokens, d_out)
-        v = self.w_v(input)  # shape: (b, num_tokens, d_out)
+        k = self.w_k(x)  # shape: (b, num_tokens, d_out)
+        q = self.w_q(x)  # shape: (b, num_tokens, d_out)
+        v = self.w_v(x)  # shape: (b, num_tokens, d_out)
 
         # Reshape `k`, `q`, `v` tensors to separate the attention heads.
         k = torch.transpose(
