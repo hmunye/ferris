@@ -1,18 +1,13 @@
+import torch
+
 def main():
-    import torch
     import tiktoken
     from transformer import GPTModel
 
     tokenizer = tiktoken.get_encoding("gpt2")
-    batch = []
-    txt1 = "Every effort moves you"
-    txt2 = "Every day holds a"
 
-    batch.append(torch.tensor(tokenizer.encode(txt1)))
-    batch.append(torch.tensor(tokenizer.encode(txt2)))
-    batch = torch.stack(batch, dim=0)
-
-    GPT_CONFIG_124M = {
+    # GPT-2 124M parameters
+    cfg = {
         "vocab_size": 50257,  # Byte Pair Encoding (BPE) vocabulary size
         "context_len": 1024,  # Maximum input tokens via positional embeddings
         "emb_dim": 768,  # Dimensionality of embedding space (token vectors)
@@ -22,24 +17,44 @@ def main():
         "qkv_bias": False,  # Whether to include bias term in QKV projections
     }
 
-    torch.manual_seed(123)
-    model = GPTModel(GPT_CONFIG_124M)
-    logits = model(batch)
+    # torch.manual_seed(123)
 
-    print("input:\n", batch)
-    print("\noutput shape:", logits.shape)
-    print("\noutput:\n", logits)
+    model = GPTModel(cfg)
 
-    total_params = sum(p.numel() for p in model.parameters())
+    start_ctx = "Hello, I am"
+    encoded = tokenizer.encode(start_ctx)
 
-    print(
-        "total number of trainable parameters (considering weight tying):",
-        total_params - sum(p.numel() for p in model.out_head.parameters()),
+    print("input:", start_ctx)
+    print("encoded:", encoded)
+    encoded_tensor = torch.tensor(encoded).unsqueeze(0)
+    print("tensor shape:", encoded_tensor.shape)
+
+    model.eval()
+    out = generate_text(
+        model=model,
+        idx=encoded_tensor,
+        max_new_tokens=6,
+        context_size=cfg["context_len"],
     )
 
-    total_byte_size = total_params * 4
-    total_mb_size = total_byte_size / (1024 * 1024)
-    print(f"total size of the model: {total_mb_size:.2f} MB")
+    print("output:", out)
+    print("output len:", len(out[0]))
+
+    print("decoded:", tokenizer.decode(out.squeeze(0).tolist()))
+
+
+def generate_text(model, idx, max_new_tokens, context_size):
+    for _ in range(max_new_tokens):
+        idx_cond = idx[:, -context_size:]
+        with torch.no_grad():
+            logits = model(idx_cond)
+
+        logits = logits[:, -1, :]
+        probs = torch.softmax(logits, dim=-1)
+        next_idx = torch.argmax(probs, dim=-1, keepdim=True)
+        idx = torch.cat((idx, next_idx), dim=-1)
+
+    return idx
 
 
 if __name__ == "__main__":
