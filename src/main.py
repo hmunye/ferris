@@ -1,16 +1,28 @@
 def main():
     import torch
-    from attention import MultiHeadAttention
-    
+    from transformer import MultiHeadAttention
+
+    GPT_CONFIG_124M = {
+        "vocab_size": 50257,  # Byte Pair Encoding (BPE) vocabulary size
+        "context_size": 1024,  # Maximum input tokens via positional embeddings
+        "emb_dim": 768,  # Dimensionality of embedding space (token vectors)
+        "n_heads": 12,  # Number of attention heads
+        "n_layers": 12,  # Number of transformer layers (blocks)
+        "drop_rate": 0.1,  # Dropout rate applied to hidden units
+        "qkv_bias": False,  # Whether to include bias term in QKV projections
+    }
+
     torch.manual_seed(123)
 
     inputs = torch.tensor(
-        [[0.43, 0.15, 0.89],
-         [0.55, 0.87, 0.66],
-         [0.57, 0.85, 0.64],
-         [0.22, 0.58, 0.33],
-         [0.77, 0.25, 0.10],
-         [0.05, 0.80, 0.55]]
+        [
+            [0.43, 0.15, 0.89],
+            [0.55, 0.87, 0.66],
+            [0.57, 0.85, 0.64],
+            [0.22, 0.58, 0.33],
+            [0.77, 0.25, 0.10],
+            [0.05, 0.80, 0.55],
+        ]
     )
 
     batch = torch.stack((inputs, inputs), dim=0)
@@ -26,4 +38,4 @@ def main():
 
 
 if __name__ == "__main__":
-   main()
+    main()
