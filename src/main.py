@@ -3,8 +3,6 @@ def main():
     import tiktoken
     from transformer import GPTModel
 
-    torch.manual_seed(123)
-
     tokenizer = tiktoken.get_encoding("gpt2")
     batch = []
     txt1 = "Every effort moves you"
@@ -24,11 +22,24 @@ def main():
         "qkv_bias": False,  # Whether to include bias term in QKV projections
     }
 
+    torch.manual_seed(123)
     model = GPTModel(GPT_CONFIG_124M)
     logits = model(batch)
 
-    print("shape:", logits.shape)
-    print(logits)
+    print("input:\n", batch)
+    print("\noutput shape:", logits.shape)
+    print("\noutput:\n", logits)
+
+    total_params = sum(p.numel() for p in model.parameters())
+
+    print(
+        "total number of trainable parameters (considering weight tying):",
+        total_params - sum(p.numel() for p in model.out_head.parameters()),
+    )
+
+    total_byte_size = total_params * 4
+    total_mb_size = total_byte_size / (1024 * 1024)
+    print(f"total size of the model: {total_mb_size:.2f} MB")
 
 
 if __name__ == "__main__":

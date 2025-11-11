@@ -3,7 +3,7 @@ import torch.nn as nn
 
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, d_in, d_out, context_length, dropout, num_heads, qkv_bias=False):
+    def __init__(self, d_in, d_out, context_len, dropout, num_heads, qkv_bias=False):
         assert d_out % num_heads == 0, "d_out must be divisible by num_heads"
 
         super().__init__()
@@ -29,7 +29,7 @@ class MultiHeadAttention(nn.Module):
         self.register_buffer(
             "mask",
             torch.triu(
-                torch.ones(context_length, context_length), diagonal=1
+                torch.ones(context_len, context_len), diagonal=1
             ),  # upper triangular matrix
         )
 

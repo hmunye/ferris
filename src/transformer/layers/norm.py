@@ -13,12 +13,12 @@ class LayerNorm(nn.Module):
         self.shift = nn.Parameter(torch.zeros(emb_dim))
 
     def forward(self, x):
-        # Standard deviation across the feature dimension (emb_dim).
+        # Mean and variance across the feature dimension `emb_dim`.
         mean = x.mean(dim=-1, keepdim=True)
         var = x.var(dim=-1, keepdim=True, unbiased=False)
 
-        # Normalize the input by mean and std (var is squared std). Adding
-        # epsilon prevents division by zero.
+        # Normalize the input by mean and standard deviation (`var` is squared
+        # standard deviation). Adding `eps` prevents division by zero.
         norm = (x - mean) / torch.sqrt(var + self.eps)
 
         return self.scale * norm + self.shift
