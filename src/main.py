@@ -1,10 +1,22 @@
 def main():
     import torch
-    from transformer import MultiHeadAttention
+    import tiktoken
+    from transformer import GPTModel
+
+    torch.manual_seed(123)
+
+    tokenizer = tiktoken.get_encoding("gpt2")
+    batch = []
+    txt1 = "Every effort moves you"
+    txt2 = "Every day holds a"
+
+    batch.append(torch.tensor(tokenizer.encode(txt1)))
+    batch.append(torch.tensor(tokenizer.encode(txt2)))
+    batch = torch.stack(batch, dim=0)
 
     GPT_CONFIG_124M = {
         "vocab_size": 50257,  # Byte Pair Encoding (BPE) vocabulary size
-        "context_size": 1024,  # Maximum input tokens via positional embeddings
+        "context_len": 1024,  # Maximum input tokens via positional embeddings
         "emb_dim": 768,  # Dimensionality of embedding space (token vectors)
         "n_heads": 12,  # Number of attention heads
         "n_layers": 12,  # Number of transformer layers (blocks)
@@ -12,29 +24,11 @@ def main():
         "qkv_bias": False,  # Whether to include bias term in QKV projections
     }
 
-    torch.manual_seed(123)
+    model = GPTModel(GPT_CONFIG_124M)
+    logits = model(batch)
 
-    inputs = torch.tensor(
-        [
-            [0.43, 0.15, 0.89],
-            [0.55, 0.87, 0.66],
-            [0.57, 0.85, 0.64],
-            [0.22, 0.58, 0.33],
-            [0.77, 0.25, 0.10],
-            [0.05, 0.80, 0.55],
-        ]
-    )
-
-    batch = torch.stack((inputs, inputs), dim=0)
-
-    batch_size, context_length, d_in = batch.shape
-    d_out = 2
-
-    mha = MultiHeadAttention(d_in, d_out, context_length, 0.0, num_heads=2)
-    context_vecs = mha(batch)
-
-    print("context vectors:", context_vecs)
-    print("context shape:", context_vecs.shape)
+    print("shape:", logits.shape)
+    print(logits)
 
 
 if __name__ == "__main__":

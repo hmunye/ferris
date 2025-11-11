@@ -1,7 +1,8 @@
 import torch
+import torch.nn as nn
 
 
-class MultiHeadAttention(torch.nn.Module):
+class MultiHeadAttention(nn.Module):
     def __init__(self, d_in, d_out, context_length, dropout, num_heads, qkv_bias=False):
         assert d_out % num_heads == 0, "d_out must be divisible by num_heads"
 
@@ -13,15 +14,15 @@ class MultiHeadAttention(torch.nn.Module):
         self.head_dim = d_out // num_heads
 
         # Initialize weight matrices for query, key, and value projections.
-        self.w_q = torch.nn.Linear(d_in, d_out, bias=qkv_bias)
-        self.w_k = torch.nn.Linear(d_in, d_out, bias=qkv_bias)
-        self.w_v = torch.nn.Linear(d_in, d_out, bias=qkv_bias)
+        self.w_q = nn.Linear(d_in, d_out, bias=qkv_bias)
+        self.w_k = nn.Linear(d_in, d_out, bias=qkv_bias)
+        self.w_v = nn.Linear(d_in, d_out, bias=qkv_bias)
 
         # Linear projection to combine results from all attention heads.
-        self.out_proj = torch.nn.Linear(d_out, d_out)
+        self.out_proj = nn.Linear(d_out, d_out)
 
         # Dropout layer to help reduce overfitting during training.
-        self.dropout = torch.nn.Dropout(dropout)
+        self.dropout = nn.Dropout(dropout)
 
         # Causal mask to ensure tokens only attend to the current and previous
         # tokens.
@@ -65,9 +66,7 @@ class MultiHeadAttention(torch.nn.Module):
         attn_scores.masked_fill_(mask_bool, -torch.inf)
 
         # Normalize the attention scores using softmax to get attention weights.
-        attn_weights = torch.nn.functional.softmax(
-            attn_scores / k.shape[-1] ** 0.5, dim=-1
-        )
+        attn_weights = nn.functional.softmax(attn_scores / k.shape[-1] ** 0.5, dim=-1)
         attn_weights = self.dropout(attn_weights)
 
         # Compute the context vectors by multiplying the attention weights with
