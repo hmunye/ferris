@@ -25,7 +25,7 @@ def train():
     train_losses, val_losses, seen = [], [], []
     tokens_seen, global_step = 0, -1
 
-    for epoch in range(cfg.num_epochs):
+    for epoch in range(cfg.n_epoch):
         model.train()
 
         for input_batch, target_batch in train_loader:
@@ -58,11 +58,13 @@ def train():
         # Print sample output after each epoch.
         print_sample(model, tokenizer, device, start_ctx)
 
-    # Save the model and optimizer parameters.
+    # Save the model and optimizer parameters, as well as the current
+    # configuration.
     torch.save(
         {
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
+            "cfg": cfg,
         },
         "checkpoints/model.pth",
     )
@@ -82,8 +84,8 @@ def prepare_data_loaders(cfg, tokenizer):
         train_data,
         tokenizer,
         batch_size=2,
-        max_length=cfg.context_len,
-        stride=cfg.context_len,
+        max_len=cfg.n_ctx,
+        stride=cfg.n_ctx,
         drop_last=True,
         shuffle=True,
         num_workers=0,
@@ -93,8 +95,8 @@ def prepare_data_loaders(cfg, tokenizer):
         val_data,
         tokenizer,
         batch_size=2,
-        max_length=cfg.context_len,
-        stride=cfg.context_len,
+        max_len=cfg.n_ctx,
+        stride=cfg.n_ctx,
         drop_last=False,
         shuffle=False,
         num_workers=0,

@@ -1,21 +1,18 @@
-SRC = src
+.DEFAULT_GOAL := inference
 
-.DEFAULT_GOAL := run
+.PHONY: inference train lint fmt clean
 
-.PHONY: run train lint fmt clean
-
-run:
-	@uv run $(SRC)/main.py
+inference:
+	@uv run src/main.py
 
 train:
-	@uv run $(SRC)/train.py
+	@uv run src/train.py
 
 lint:
-	@uvx ruff check $(SRC)
+	@uvx ruff check src/
 
 fmt:
-	@uvx black $(SRC)
+	@uvx black src/
 
 clean:
 	@rm -rf .ruff_cache
-	@rm -rf $(SRC)/**/__pycache__

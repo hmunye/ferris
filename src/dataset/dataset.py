@@ -30,13 +30,13 @@ def create_dataloader(
     txt,
     tokenizer,
     batch_size,
-    max_length,
+    max_len,
     stride,
     shuffle=True,
     drop_last=True,
     num_workers=0,
 ):
-    dataset = GPTDataset(txt, tokenizer, max_length, stride)
+    dataset = GPTDataset(txt, tokenizer, max_len, stride)
 
     dataloader = DataLoader(
         dataset,

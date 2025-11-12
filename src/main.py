@@ -26,7 +26,7 @@ def main():
                 model=model,
                 idx=encode_text(prompt, tokenizer).to(device),
                 max_new_tokens=30,
-                context_size=cfg.context_len,
+                context_size=cfg.n_ctx,
                 top_k=25,
                 temp=1.0,
             )
