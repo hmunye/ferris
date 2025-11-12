@@ -1,3 +1,7 @@
+# TODO: Look into Mixture-of-Experts (MoE) layers instead of regular
+# feed-forward (FFN) layers.
+
+
 import torch.nn as nn
 
 from .gelu import GELU

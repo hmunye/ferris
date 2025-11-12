@@ -1,3 +1,6 @@
+# TODO: Maybe add KV cache for more efficient inference. Look into GQA/MLA/SWA
+# over regular Multi-Head Attention (MHA).
+
 import torch.nn as nn
 
 
