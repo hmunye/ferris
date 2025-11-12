@@ -1,3 +1,3 @@
-from .dataset import GPTDataset, create_dataloader
+from .dataset import create_dataloader
 
 __all__ = ["GPTDataset, create_dataloader"]

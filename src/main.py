@@ -7,7 +7,9 @@ from data import create_dataloader
 
 
 def main():
-    torch.manual_seed(123)
+    # torch.manual_seed(123)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # GPT-2 124M parameters
     cfg = {
@@ -19,6 +21,12 @@ def main():
         "drop_rate": 0.1,  # Dropout rate applied to hidden units
         "qkv_bias": False,  # Whether to include bias term in QKV projections
     }
+
+    model = GPTModel(cfg)
+    model.to(device)
+
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.0004, weight_decay=0.1)
+    num_epochs = 10
 
     tokenizer = tiktoken.get_encoding("gpt2")
 
@@ -51,17 +59,103 @@ def main():
         num_workers=0,
     )
 
-    model = GPTModel(cfg)
+    train_losses, val_losses, tokens_seen = train(
+        model=model,
+        train_loader=train_loader,
+        val_loader=val_loader,
+        optimizer=optimizer,
+        device=device,
+        num_epochs=num_epochs,
+        eval_freq=5,
+        eval_iter=5,
+        start_ctx="Every effort moves you",
+        tokenizer=tokenizer,
+    )
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.to(device)
 
+def train(
+    model,
+    train_loader,
+    val_loader,
+    optimizer,
+    device,
+    num_epochs,
+    eval_freq,
+    eval_iter,
+    start_ctx,
+    tokenizer,
+):
+    train_losses, val_losses, seen = [], [], []
+    tokens_seen, global_step = 0, -1
+
+    for epoch in range(num_epochs):
+        model.train()
+
+        for input_batch, target_batch in train_loader:
+            optimizer.zero_grad()
+            loss = calc_loss_batch(input_batch, target_batch, model, device)
+
+            # Calculate loss gradients.
+            loss.backward()
+
+            # Update model weights using loss gradients.
+            optimizer.step()
+
+            tokens_seen += input_batch.numel()
+            global_step += 1
+
+            if global_step % eval_freq == 0:
+                train_loss, val_loss = evaluate_model(
+                    model, train_loader, val_loader, device, eval_iter
+                )
+                train_losses.append(train_loss)
+                val_losses.append(val_loss)
+                seen.append(tokens_seen)
+
+                print(
+                    f"ep {epoch+1} (step {global_step:06d}): "
+                    f"train loss {train_loss:.3f}"
+                    f"val loss {val_loss:.3f}"
+                )
+
+        # Print sample output after each epoch.
+        generate_and_print_sample(model, tokenizer, device, start_ctx)
+
+    return train_losses, val_losses, seen
+
+
+def evaluate_model(model, train_loader, val_loader, device, eval_iter):
+    # Disables dropout.
+    model.eval()
+
+    # Disables gradient tracking.
     with torch.no_grad():
-        train_loss = calc_loss_loader(train_loader, model, device)
-        val_loss = calc_loss_loader(val_loader, model, device)
+        train_loss = calc_loss_loader(
+            train_loader, model, device, num_batches=eval_iter
+        )
+        val_loss = calc_loss_loader(val_loader, model, device, num_batches=eval_iter)
 
-    print("training loss:", train_loss)
-    print("validation loss:", val_loss)
+    model.train()
+    return train_loss, val_loss
+
+
+def generate_and_print_sample(model, tokenizer, device, start_ctx):
+    # Disables dropout.
+    model.eval()
+
+    context_size = model.pos_emb.weight.shape[0]
+    encoded = encode_text(start_ctx, tokenizer).to(device)
+
+    # Disables gradient tracking.
+    with torch.no_grad():
+        token_ids = generate_text(
+            model=model, idx=encoded, max_new_tokens=50, context_size=context_size
+        )
+
+    decoded_text = decode_tokens(token_ids, tokenizer).replace("\n", " ")
+    print(f"{decoded_text}\n")
+
+    model.train()
 
 
 def calc_loss_loader(data_loader, model, device, num_batches=None):
@@ -109,7 +203,12 @@ def generate_text(model, idx, max_new_tokens, context_size):
         logits = logits[:, -1, :]
 
         probas = torch.softmax(logits, dim=-1)
-        next_idx = torch.argmax(probas, dim=-1, keepdim=True)
+
+        # Greedy decoding.
+        # next_idx = torch.argmax(probas, dim=-1, keepdim=True)
+
+        # Probabilistic sampling.
+        next_idx = torch.multinomial(probas, num_samples=1)
 
         idx = torch.cat((idx, next_idx), dim=-1)
 
