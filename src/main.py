@@ -2,13 +2,10 @@ import torch
 import tiktoken
 
 from transformer import GPTModel
-from util import encode_text, decode_tokens
-from data import create_dataloader
+from util import encode_text, decode_tokens, generate
 
 
 def main():
-    # torch.manual_seed(123)
-
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # GPT-2 124M parameters
@@ -20,199 +17,35 @@ def main():
         "n_layers": 12,  # Number of transformer layers (blocks)
         "drop_rate": 0.1,  # Dropout rate applied to hidden units
         "qkv_bias": False,  # Whether to include bias term in QKV projections
+        "num_epochs": 10,
     }
 
-    model = GPTModel(cfg)
-    model.to(device)
+    checkpoint = torch.load("checkpoints/model.pth", map_location=device)
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=0.0004, weight_decay=0.1)
-    num_epochs = 10
+    model = GPTModel(cfg)
+    model.load_state_dict(checkpoint["model_state_dict"])
+
+    model.to(device)
+    model.eval()
 
     tokenizer = tiktoken.get_encoding("gpt2")
 
-    file_path = "datasets/the-verdict.txt"
-    with open(file_path, "r", encoding="utf-8") as f:
-        text_data = f.read()
+    while True:
+        try:
+            prompt = input("prompt: ")
 
-    train_ratio = 0.90
-    split_idx = int(train_ratio * len(text_data))
-    train_data = text_data[:split_idx]
-    val_data = text_data[split_idx:]
+            token_ids = generate(
+                model=model,
+                idx=encode_text(prompt, tokenizer).to(device),
+                max_new_tokens=30,
+                context_size=cfg["context_len"],
+                top_k=25,
+                temp=1.0,
+            )
 
-    train_loader = create_dataloader(
-        train_data,
-        batch_size=2,
-        max_length=cfg["context_len"],
-        stride=cfg["context_len"],
-        drop_last=True,
-        shuffle=True,
-        num_workers=0,
-    )
-
-    val_loader = create_dataloader(
-        val_data,
-        batch_size=2,
-        max_length=cfg["context_len"],
-        stride=cfg["context_len"],
-        drop_last=False,
-        shuffle=False,
-        num_workers=0,
-    )
-
-    train_losses, val_losses, tokens_seen = train(
-        model=model,
-        train_loader=train_loader,
-        val_loader=val_loader,
-        optimizer=optimizer,
-        device=device,
-        num_epochs=num_epochs,
-        eval_freq=5,
-        eval_iter=5,
-        start_ctx="Every effort moves you",
-        tokenizer=tokenizer,
-    )
-
-
-def train(
-    model,
-    train_loader,
-    val_loader,
-    optimizer,
-    device,
-    num_epochs,
-    eval_freq,
-    eval_iter,
-    start_ctx,
-    tokenizer,
-):
-    train_losses, val_losses, seen = [], [], []
-    tokens_seen, global_step = 0, -1
-
-    for epoch in range(num_epochs):
-        model.train()
-
-        for input_batch, target_batch in train_loader:
-            optimizer.zero_grad()
-            loss = calc_loss_batch(input_batch, target_batch, model, device)
-
-            # Calculate loss gradients.
-            loss.backward()
-
-            # Update model weights using loss gradients.
-            optimizer.step()
-
-            tokens_seen += input_batch.numel()
-            global_step += 1
-
-            if global_step % eval_freq == 0:
-                train_loss, val_loss = evaluate_model(
-                    model, train_loader, val_loader, device, eval_iter
-                )
-                train_losses.append(train_loss)
-                val_losses.append(val_loss)
-                seen.append(tokens_seen)
-
-                print(
-                    f"ep {epoch+1} (step {global_step:06d}): "
-                    f"train loss {train_loss:.3f}"
-                    f"val loss {val_loss:.3f}"
-                )
-
-        # Print sample output after each epoch.
-        generate_and_print_sample(model, tokenizer, device, start_ctx)
-
-    return train_losses, val_losses, seen
-
-
-def evaluate_model(model, train_loader, val_loader, device, eval_iter):
-    # Disables dropout.
-    model.eval()
-
-    # Disables gradient tracking.
-    with torch.no_grad():
-        train_loss = calc_loss_loader(
-            train_loader, model, device, num_batches=eval_iter
-        )
-        val_loss = calc_loss_loader(val_loader, model, device, num_batches=eval_iter)
-
-    model.train()
-    return train_loss, val_loss
-
-
-def generate_and_print_sample(model, tokenizer, device, start_ctx):
-    # Disables dropout.
-    model.eval()
-
-    context_size = model.pos_emb.weight.shape[0]
-    encoded = encode_text(start_ctx, tokenizer).to(device)
-
-    # Disables gradient tracking.
-    with torch.no_grad():
-        token_ids = generate_text(
-            model=model, idx=encoded, max_new_tokens=50, context_size=context_size
-        )
-
-    decoded_text = decode_tokens(token_ids, tokenizer).replace("\n", " ")
-    print(f"{decoded_text}\n")
-
-    model.train()
-
-
-def calc_loss_loader(data_loader, model, device, num_batches=None):
-    total_loss = 0.0
-    loader_len = len(data_loader)
-
-    if loader_len == 0:
-        return float("nan")
-    elif num_batches is None:
-        num_batches = loader_len
-    else:
-        num_batches = min(num_batches, loader_len)
-
-    for i, (input_batch, target_batch) in enumerate(data_loader):
-        if i < num_batches:
-            loss = calc_loss_batch(input_batch, target_batch, model, device)
-            total_loss += loss
-        else:
+            print("output:", decode_tokens(token_ids, tokenizer))
+        except (EOFError, KeyboardInterrupt):
             break
-
-    # Average the loss over all batches.
-    return total_loss / num_batches
-
-
-def calc_loss_batch(input_batch, target_batch, model, device):
-    input_batch = input_batch.to(device)
-    target_batch = target_batch.to(device)
-
-    logits = model(input_batch)
-    loss = torch.nn.functional.cross_entropy(
-        logits.flatten(0, 1), target_batch.flatten()
-    )
-
-    return loss
-
-
-def generate_text(model, idx, max_new_tokens, context_size):
-    for _ in range(max_new_tokens):
-        idx_cond = idx[:, -context_size:]
-
-        # Disable gradient tracking.
-        with torch.no_grad():
-            logits = model(idx_cond)
-
-        logits = logits[:, -1, :]
-
-        probas = torch.softmax(logits, dim=-1)
-
-        # Greedy decoding.
-        # next_idx = torch.argmax(probas, dim=-1, keepdim=True)
-
-        # Probabilistic sampling.
-        next_idx = torch.multinomial(probas, num_samples=1)
-
-        idx = torch.cat((idx, next_idx), dim=-1)
-
-    return idx
 
 
 if __name__ == "__main__":

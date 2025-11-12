@@ -1,4 +1,3 @@
-import tiktoken
 import torch
 from torch.utils.data import Dataset, DataLoader
 
@@ -28,9 +27,15 @@ class GPTDataset(Dataset):
 
 
 def create_dataloader(
-    txt, batch_size, max_length, stride, shuffle=True, drop_last=True, num_workers=0
+    txt,
+    tokenizer,
+    batch_size,
+    max_length,
+    stride,
+    shuffle=True,
+    drop_last=True,
+    num_workers=0,
 ):
-    tokenizer = tiktoken.get_encoding("gpt2")
     dataset = GPTDataset(txt, tokenizer, max_length, stride)
 
     dataloader = DataLoader(
