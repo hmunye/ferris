@@ -4,22 +4,11 @@ import tiktoken
 from dataset import create_dataloader
 from transformer import GPTModel
 from util import encode_text, decode_tokens, generate
+from config import cfg
 
 
 def train():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    # GPT-2 124M parameters
-    cfg = {
-        "vocab_size": 50257,  # Byte Pair Encoding (BPE) vocabulary size
-        "context_len": 256,  # Maximum input tokens via positional embeddings
-        "emb_dim": 768,  # Dimensionality of embedding space (token vectors)
-        "n_heads": 12,  # Number of attention heads
-        "n_layers": 12,  # Number of transformer layers (blocks)
-        "drop_rate": 0.1,  # Dropout rate applied to hidden units
-        "qkv_bias": False,  # Whether to include bias term in QKV projections
-        "num_epochs": 10,
-    }
 
     model = GPTModel(cfg)
     model.to(device)
@@ -36,7 +25,7 @@ def train():
     train_losses, val_losses, seen = [], [], []
     tokens_seen, global_step = 0, -1
 
-    for epoch in range(cfg["num_epochs"]):
+    for epoch in range(cfg.num_epochs):
         model.train()
 
         for input_batch, target_batch in train_loader:
@@ -93,8 +82,8 @@ def prepare_data_loaders(cfg, tokenizer):
         train_data,
         tokenizer,
         batch_size=2,
-        max_length=cfg["context_len"],
-        stride=cfg["context_len"],
+        max_length=cfg.context_len,
+        stride=cfg.context_len,
         drop_last=True,
         shuffle=True,
         num_workers=0,
@@ -104,8 +93,8 @@ def prepare_data_loaders(cfg, tokenizer):
         val_data,
         tokenizer,
         batch_size=2,
-        max_length=cfg["context_len"],
-        stride=cfg["context_len"],
+        max_length=cfg.context_len,
+        stride=cfg.context_len,
         drop_last=False,
         shuffle=False,
         num_workers=0,

@@ -8,22 +8,22 @@ class GPTModel(nn.Module):
     def __init__(self, cfg):
         super().__init__()
 
-        self.tok_emb = nn.Embedding(cfg["vocab_size"], cfg["emb_dim"])
+        self.tok_emb = nn.Embedding(cfg.vocab_size, cfg.emb_dim)
 
         # Encodes the position of each token in the sequence (since transformers
         # do not inherently process sequences in-order) into a dense vector
         # embedding.
-        self.pos_emb = nn.Embedding(cfg["context_len"], cfg["emb_dim"])
+        self.pos_emb = nn.Embedding(cfg.context_len, cfg.emb_dim)
 
-        self.drop_emb = nn.Dropout(cfg["drop_rate"])
+        self.drop_emb = nn.Dropout(cfg.drop_rate)
 
         # Sequential stack of transformer blocks (decoder layers).
         self.trf_blocks = nn.Sequential(
-            *[TransformerBlock(cfg) for _ in range(cfg["n_layers"])]
+            *[TransformerBlock(cfg) for _ in range(cfg.n_layers)]
         )
 
-        self.final_norm = LayerNorm(cfg["emb_dim"])
-        self.out_head = nn.Linear(cfg["emb_dim"], cfg["vocab_size"], bias=False)
+        self.final_norm = LayerNorm(cfg.emb_dim)
+        self.out_head = nn.Linear(cfg.emb_dim, cfg.vocab_size, bias=False)
 
     def forward(self, in_idx):
         batch_size, seq_len = in_idx.shape
