@@ -58,13 +58,11 @@ def train():
         # Print sample output after each epoch.
         print_sample(model, tokenizer, device, start_ctx)
 
-    # Save the model and optimizer parameters, as well as the current
-    # configuration.
+    # Save the model and optimizer parameters.
     torch.save(
         {
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
-            "cfg": cfg,
         },
         "checkpoints/model.pth",
     )
