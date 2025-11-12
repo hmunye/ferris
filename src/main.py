@@ -3,7 +3,7 @@ import tiktoken
 import time
 
 from transformer import GPTModel
-from util import encode_text
+from util import encode_text, decode_tokens
 from config import cfg
 
 
@@ -12,38 +12,48 @@ def main():
 
     checkpoint = torch.load("checkpoints/model.pth", map_location=device)
 
+    if torch.cuda.is_available():
+        capability = torch.cuda.get_device_capability()
+
+        # Volta (7.0+), Turing (7.5+), Ampere (8.0+), Hopper (9.0+).
+        if capability[0] >= 7:
+            torch.backends.cuda.matmul.fp32_precision = "tf32"
+            torch.backends.cudnn.conv.fp32_precision = "tf32"
+
     model = GPTModel(cfg)
+    model = torch.compile(model)
     model.load_state_dict(checkpoint["model_state_dict"])
-    model.to(device)
-    model.eval()
+    model.to(device).to(torch.bfloat16)
 
     tokenizer = tiktoken.get_encoding("gpt2")
 
+    eos_id = tokenizer.eot_token
     max_new_tokens = 30
+
+    model.eval()
 
     while True:
         try:
             prompt = input("prompt: ")
-
             idx = encode_text(prompt, tokenizer).to(device)
-
-            print(f"output: {prompt}", end="", flush=True)
+            print(f"output: {prompt}", sep="", end="")
 
             # Disable gradient tracking.
-            with torch.no_grad():
+            with torch.inference_mode():
                 for _ in range(max_new_tokens):
-                    token_id = generate(
+                    token_id = generate_next_token(
                         model=model,
                         idx=idx,
                         context_size=cfg.n_ctx,
-                        top_k=25,
-                        temp=1.0,
+                        top_k=cfg.top_k,
+                        temp=cfg.temp,
+                        eos_id=eos_id,
                     )
 
                     if token_id is None:
                         break
                     else:
-                        decoded_text = tokenizer.decode([token_id])
+                        decoded_text = decode_tokens(token_id, tokenizer)
 
                         print(decoded_text, sep="", end="", flush=True)
 
@@ -57,11 +67,13 @@ def main():
             break
 
 
-def generate(model, idx, context_size, temp=0.0, top_k=None, eos_id=None):
+def generate_next_token(model, idx, context_size, temp=0.0, top_k=None, eos_id=None):
+    # Truncate context.
     idx_cond = idx[:, -context_size:]
 
     logits = model(idx_cond)
 
+    # Last token logits contain the prediction.
     logits = logits[:, -1, :]
 
     if top_k is not None:
@@ -88,7 +100,7 @@ def generate(model, idx, context_size, temp=0.0, top_k=None, eos_id=None):
         # Greedy decoding.
         next_idx = torch.argmax(logits, dim=-1, keepdim=True)
 
-    if next_idx == eos_id:
+    if next_idx.item() == eos_id:
         return None
 
     return next_idx

@@ -2,6 +2,7 @@ import torch
 import tiktoken
 import time
 import os
+import math
 import requests
 
 from dataset import create_dataloader
@@ -14,7 +15,7 @@ def train():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     print(f"PyTorch version: {torch.__version__}")
-    print(f"using {device}")
+    print(f"using device: {device}")
 
     if torch.cuda.is_available():
         print(f"CUDA version: {torch.version.cuda}")
@@ -35,17 +36,21 @@ def train():
     model = GPTModel(cfg)
     model = torch.compile(model)
     model.to(device).to(torch.bfloat16)
-    optimizer = torch.optim.AdamW(
-        model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay
-    )
+    optimizer = torch.optim.AdamW(model.parameters(), weight_decay=cfg.weight_decay)
 
-    start_ctx = "Every effort moves you"
+    global_step = -1
 
-    train_losses, val_losses, track_tokens = [], [], []
-    total_tokens, global_step, last_tokens = 0, -1, 0
-
-    # Variables for cumulative average tokens/sec.
+    total_tokens, last_tokens = 0, 0
     cumulative_tokens, cumulative_time = 0.0, 0.0
+
+    # Total training iterations.
+    n_steps = len(train_loader) * cfg.n_epoch
+
+    n_warmup = int(0.1 * n_steps)
+
+    # Learning rate linear warmup stabilizes training by gradually increasing
+    # the learning rate from an initial value to a peak during "warmup" phase.
+    lr_increment = (cfg.lr_peak - cfg.lr_init) / n_warmup
 
     use_cuda = device.type == "cuda"
 
@@ -67,10 +72,28 @@ def train():
             optimizer.zero_grad()
             global_step += 1
 
+            if global_step < n_warmup:
+                # Update learning rate during warmup phase.
+                lr = cfg.lr_init + global_step * lr_increment
+            else:
+                # Cosine annealing after warmup phase to modulate the learning
+                # rate throughout training.
+                progress = (global_step - n_warmup) / (n_steps - n_warmup)
+                lr = cfg.lr_min + (cfg.lr_peak - cfg.lr_min) * 0.5 * (
+                    1 + math.cos(math.pi * progress)
+                )
+
+            for param_group in optimizer.param_groups:
+                param_group["lr"] = lr
+
             # Forward and backward pass.
             loss = calc_loss_batch(input_batch, target_batch, model, device)
             # Calculate loss gradients.
             loss.backward()
+
+            # Apply gradient clipping to avoid exploding gradients.
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+
             # Update model weights using loss gradients.
             optimizer.step()
 
@@ -108,9 +131,6 @@ def train():
                 train_loss, val_loss = evaluate_model(
                     model, train_loader, val_loader, device, cfg.eval_iter
                 )
-                train_losses.append(train_loss)
-                val_losses.append(val_loss)
-                track_tokens.append(total_tokens)
 
                 print(
                     f"ep {epoch+1}, step {global_step:06d}, "
@@ -119,7 +139,7 @@ def train():
                 )
 
         # Print sample output after each epoch.
-        print_sample(model, tokenizer, device, start_ctx)
+        print_sample(model, tokenizer, device, "Every effort moves you")
 
         # Print memory stats after each epoch.
         if torch.cuda.is_available():
@@ -140,17 +160,22 @@ def train():
         "checkpoints/model.pth",
     )
 
+    print("saved model state")
+
 
 def prepare_data_loaders(cfg, tokenizer):
     print("preparing data loaders...")
 
     file_path = "data/middlemarch.txt"
+    dir_path = os.path.dirname(file_path)
     url = "https://www.gutenberg.org/cache/epub/145/pg145.txt"
 
     if not os.path.exists(file_path):
         response = requests.get(url, timeout=30)
         response.raise_for_status()
         text_data = response.text
+
+        os.makedirs(dir_path)
         with open(file_path, "w", encoding="utf-8") as file:
             file.write(text_data)
     else:
@@ -163,7 +188,7 @@ def prepare_data_loaders(cfg, tokenizer):
     train_loader = create_dataloader(
         text_data[:split_idx],
         tokenizer,
-        batch_size=2,
+        batch_size=cfg.n_batch,
         max_len=cfg.n_ctx,
         stride=cfg.n_ctx,
         drop_last=True,
@@ -174,7 +199,7 @@ def prepare_data_loaders(cfg, tokenizer):
     val_loader = create_dataloader(
         text_data[split_idx:],
         tokenizer,
-        batch_size=2,
+        batch_size=cfg.n_batch,
         max_len=cfg.n_ctx,
         stride=cfg.n_ctx,
         drop_last=False,
@@ -232,6 +257,7 @@ def evaluate_model(model, train_loader, val_loader, device, eval_iter):
         val_loss = calc_loss_loader(val_loader, model, device, num_batches=eval_iter)
 
     model.train()
+
     return train_loss, val_loss
 
 
@@ -253,7 +279,7 @@ def print_sample(model, tokenizer, device, start_ctx):
             top_k=25,
         )
 
-    # Compact the print format, replacing newlines.
+    # Print in compacted format, replacing newlines.
     decoded_text = decode_tokens(token_ids, tokenizer).replace("\n", " ")
     print(f"{decoded_text}\n")
 
