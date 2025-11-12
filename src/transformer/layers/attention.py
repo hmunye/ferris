@@ -5,13 +5,12 @@ import torch.nn as nn
 
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, d_in, d_out, context_len, dropout, num_heads, qkv_bias=False):
+    def __init__(self, d_in, d_out, num_heads, dropout=0.0, qkv_bias=False):
         assert d_out % num_heads == 0, "d_out must be divisible by num_heads"
 
         super().__init__()
 
         self.d_out = d_out
-        self.context_len = context_len
         self.num_heads = num_heads
         self.head_dim = d_out // num_heads
 
@@ -110,6 +109,6 @@ class MultiHeadAttention(nn.Module):
             context_vec.transpose(1, 2).contiguous().view(b, num_tokens, self.d_out)
         )
 
-        # Linearly project the concatenated context vectors back to the original
-        # output dimension.
+        # Project the concatenated context vectors back to the original output
+        # dimension.
         return self.proj(context_vec)

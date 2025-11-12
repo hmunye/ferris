@@ -1,8 +1,8 @@
 import torch
 
 
-def encode_text(text, tokenizer):
-    encoded = tokenizer.encode(text, allowed_special={"<|endoftext|>"})
+def encode_text(txt, tokenizer):
+    encoded = tokenizer.encode(txt, allowed_special={"<|endoftext|>"})
     # Add `batch` dimension.
     encoded_tensor = torch.tensor(encoded).unsqueeze(0)
     return encoded_tensor

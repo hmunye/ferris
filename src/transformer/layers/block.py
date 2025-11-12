@@ -1,7 +1,6 @@
 import torch.nn as nn
 
 from .attention import MultiHeadAttention
-from .norm import LayerNorm
 from .feed_forward import FeedForward
 
 
@@ -12,15 +11,14 @@ class TransformerBlock(nn.Module):
         self.att = MultiHeadAttention(
             d_in=cfg.n_embd,
             d_out=cfg.n_embd,
-            context_len=cfg.n_ctx,
             num_heads=cfg.n_head,
             dropout=cfg.drop_rate,
             qkv_bias=cfg.qkv_bias,
         )
 
         self.ff = FeedForward(cfg)
-        self.norm1 = LayerNorm(cfg.n_embd)
-        self.norm2 = LayerNorm(cfg.n_embd)
+        self.norm1 = nn.LayerNorm(cfg.n_embd)
+        self.norm2 = nn.LayerNorm(cfg.n_embd)
         self.drop_shortcut = nn.Dropout(cfg.drop_rate)
 
     def forward(self, x):

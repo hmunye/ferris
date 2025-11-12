@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from .layers import TransformerBlock, LayerNorm
+from .layers import TransformerBlock
 
 
 class GPTModel(nn.Module):
@@ -22,7 +22,7 @@ class GPTModel(nn.Module):
             *[TransformerBlock(cfg) for _ in range(cfg.n_layer)]
         )
 
-        self.final_norm = LayerNorm(cfg.n_embd)
+        self.final_norm = nn.LayerNorm(cfg.n_embd)
         self.out_head = nn.Linear(cfg.n_embd, cfg.n_vocab, bias=False)
 
     def forward(self, in_idx):

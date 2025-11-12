@@ -1,8 +1,8 @@
-.DEFAULT_GOAL := inference
+.DEFAULT_GOAL := run
 
-.PHONY: inference train lint fmt clean
+.PHONY: run train lint fmt clean
 
-inference:
+run:
 	@uv run src/main.py
 
 train:

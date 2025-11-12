@@ -4,8 +4,6 @@
 
 import torch.nn as nn
 
-from .gelu import GELU
-
 
 class FeedForward(nn.Module):
     def __init__(self, cfg):
@@ -19,7 +17,7 @@ class FeedForward(nn.Module):
         # next layer.
         self.layers = nn.Sequential(
             nn.Linear(cfg.n_embd, 4 * cfg.n_embd),
-            GELU(),
+            nn.GELU(approximate="tanh"),
             nn.Linear(4 * cfg.n_embd, cfg.n_embd),
         )
 

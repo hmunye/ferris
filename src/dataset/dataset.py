@@ -29,9 +29,9 @@ class GPTDataset(Dataset):
 def create_dataloader(
     txt,
     tokenizer,
-    batch_size,
-    max_len,
-    stride,
+    batch_size=4,
+    max_len=256,
+    stride=128,
     shuffle=True,
     drop_last=True,
     num_workers=0,
@@ -44,6 +44,7 @@ def create_dataloader(
         shuffle=shuffle,
         drop_last=drop_last,
         num_workers=num_workers,
+        pin_memory=True,
     )
 
     return dataloader
