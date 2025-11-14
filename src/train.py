@@ -1,21 +1,19 @@
 import torch
 import tiktoken
 import time
-import os
 import math
-import requests
 
-from dataset import create_dataloader
+from dataset import prepare_data_loaders
 from transformer import GPTModel
 from util import encode_text, decode_tokens
 from config import cfg
 
 
-def train():
+def train_model():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     print(f"PyTorch version: {torch.__version__}")
-    print(f"using device: {device}")
+    print(f"Using device: {device}")
 
     if torch.cuda.is_available():
         print(f"CUDA version: {torch.version.cuda}")
@@ -26,12 +24,18 @@ def train():
         if capability[0] >= 7:
             torch.backends.cuda.matmul.fp32_precision = "tf32"
             torch.backends.cudnn.conv.fp32_precision = "tf32"
-            print("using tensor cores")
+            print("Using tensor cores")
         else:
-            print("tensor cores not supported, using default precision")
+            print("Tensor cores not supported, using default precision")
 
     tokenizer = tiktoken.get_encoding("gpt2")
+
+    print(f"Using {cfg.n_workers} worker procs for training loader")
+    print(f"Using {cfg.n_val_workers} worker procs for validation loader")
+
+    print("Preparing data loaders...")
     train_loader, val_loader = prepare_data_loaders(cfg=cfg, tokenizer=tokenizer)
+    print("Data loaders prepared\n")
 
     model = GPTModel(cfg)
     model = torch.compile(model)
@@ -45,12 +49,14 @@ def train():
 
     # Total training iterations.
     n_steps = len(train_loader) * cfg.n_epoch
-
     n_warmup = int(0.1 * n_steps)
 
     # Learning rate linear warmup stabilizes training by gradually increasing
     # the learning rate from an initial value to a peak during "warmup" phase.
     lr_increment = (cfg.lr_peak - cfg.lr_init) / n_warmup
+
+    # Keep track of best validation loss when saving model checkpoints.
+    best_val_loss = float("inf")
 
     use_cuda = device.type == "cuda"
 
@@ -65,11 +71,13 @@ def train():
         # Start the timer for the first interval.
         t0 = time.time()
 
+    # Clear initialized gradients so they can be accumulated.
+    optimizer.zero_grad()
+
     for epoch in range(cfg.n_epoch):
         model.train()
 
         for input_batch, target_batch in train_loader:
-            optimizer.zero_grad()
             global_step += 1
 
             if global_step < n_warmup:
@@ -94,8 +102,11 @@ def train():
             # Apply gradient clipping to avoid exploding gradients.
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 
-            # Update model weights using loss gradients.
-            optimizer.step()
+            # Update model weights using loss gradients with gradient
+            # accumulation.
+            if global_step % cfg.n_grad_acc == 0:
+                optimizer.step()
+                optimizer.zero_grad()
 
             total_tokens += input_batch.numel()
 
@@ -133,10 +144,25 @@ def train():
                 )
 
                 print(
-                    f"ep {epoch+1}, step {global_step:06d}, "
-                    f"train: {train_loss:.3f}, val: {val_loss:.3f}, "
-                    f"step tok/sec: {round(tps)}, avg tok/sec: {round(avg_tps)}"
+                    f"Ep {epoch+1}, Step {global_step:06d}, "
+                    f"Train: {train_loss:.3f}, Val: {val_loss:.3f}, "
+                    f"Step tok/sec: {round(tps)}, Avg tok/sec: {round(avg_tps)}"
                 )
+
+                if val_loss < best_val_loss:
+                    # Save the model and optimizer parameters.
+                    torch.save(
+                        {
+                            "model_state_dict": model.state_dict(),
+                            "optimizer_state_dict": optimizer.state_dict(),
+                        },
+                        f"checkpoints/model_epoch_{epoch+1}_step_{global_step:06d}_val_loss_{val_loss:.3f}.pth",
+                    )
+
+                    print(
+                        f"Saved model_epoch_{epoch+1}_step_{global_step:06d}_val_loss_{val_loss:.3f}"
+                    )
+                    best_val_loss = val_loss
 
         # Print sample output after each epoch.
         print_sample(model, tokenizer, device, "Every effort moves you")
@@ -148,68 +174,19 @@ def train():
             allocated_gb = torch.cuda.memory_allocated(device) / 1024**3
             reserved_gb = torch.cuda.memory_reserved(device) / 1024**3
 
-            print(f"\nallocated memory: {allocated_gb:.4f} GB")
-            print(f"reserved memory: {reserved_gb:.4f} GB\n")
+            print(f"Allocated memory: {allocated_gb:.4f} GB")
+            print(f"Reserved memory: {reserved_gb:.4f} GB\n")
 
-    # Save the model and optimizer parameters.
+    # Save the final model and optimizer parameters.
     torch.save(
         {
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
         },
-        "checkpoints/model.pth",
+        "checkpoints/final_model.pth",
     )
 
-    print("saved model state")
-
-
-def prepare_data_loaders(cfg, tokenizer):
-    print("preparing data loaders...")
-
-    file_path = "data/middlemarch.txt"
-    dir_path = os.path.dirname(file_path)
-    url = "https://www.gutenberg.org/cache/epub/145/pg145.txt"
-
-    if not os.path.exists(file_path):
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
-        text_data = response.text
-
-        os.makedirs(dir_path)
-        with open(file_path, "w", encoding="utf-8") as file:
-            file.write(text_data)
-    else:
-        with open(file_path, "r", encoding="utf-8") as file:
-            text_data = file.read()
-
-    train_ratio = 0.90
-    split_idx = int(train_ratio * len(text_data))
-
-    train_loader = create_dataloader(
-        text_data[:split_idx],
-        tokenizer,
-        batch_size=cfg.n_batch,
-        max_len=cfg.n_ctx,
-        stride=cfg.n_ctx,
-        drop_last=True,
-        shuffle=True,
-        num_workers=0,
-    )
-
-    val_loader = create_dataloader(
-        text_data[split_idx:],
-        tokenizer,
-        batch_size=cfg.n_batch,
-        max_len=cfg.n_ctx,
-        stride=cfg.n_ctx,
-        drop_last=False,
-        shuffle=False,
-        num_workers=0,
-    )
-
-    print("data prepared\n")
-
-    return train_loader, val_loader
+    print("Saved final_model")
 
 
 def calc_loss_batch(input_batch, target_batch, model, device):
@@ -332,4 +309,4 @@ def generate(
 
 
 if __name__ == "__main__":
-    train()
+    train_model()

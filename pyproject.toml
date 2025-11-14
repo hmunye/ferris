@@ -5,7 +5,13 @@ description = "GPT-like Large Language Model"
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
 dependencies = [
+    "datasets>=4.4.1",
     "numpy>=2.2.6",
     "tiktoken>=0.12.0",
     "torch>=2.9.0",
+]
+
+[dependency-groups]
+dev = [
+    "tqdm>=4.67.1",
 ]

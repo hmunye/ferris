@@ -1,6 +1,6 @@
 .ruff_cache/
 checkpoints/
-data/
+dataset/
 
 # Python-generated files
 __pycache__/
