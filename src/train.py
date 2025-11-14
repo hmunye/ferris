@@ -2,6 +2,9 @@ import torch
 import tiktoken
 import time
 import math
+import sys
+import re
+import argparse
 
 from dataset import prepare_data_loaders
 from transformer import GPTModel
@@ -9,7 +12,7 @@ from util import encode_text, decode_tokens
 from config import cfg
 
 
-def train_model():
+def train_model(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     print(f"PyTorch version: {torch.__version__}")
@@ -35,28 +38,57 @@ def train_model():
 
     print("Preparing data loaders...")
     train_loader, val_loader = prepare_data_loaders(cfg=cfg, tokenizer=tokenizer)
-    print("Data loaders prepared\n")
+    print("Data loaders prepared")
 
-    model = GPTModel(cfg)
-    model = torch.compile(model)
-    model.to(device).to(torch.bfloat16)
-    optimizer = torch.optim.AdamW(model.parameters(), weight_decay=cfg.weight_decay)
+    # Determine if training is being resumed.
+    checkpoint_file = args.file
 
-    global_step = -1
+    if checkpoint_file:
+        pattern = r"checkpoints/model_epoch_(\d+)_step_(\d+)_val_loss_([\d.]+)\.pth"
+        match = re.match(pattern, checkpoint_file)
+
+        if match:
+            resume_epoch = int(match.group(1)) - 1
+            global_step = int(match.group(2))
+            # Keep track of best validation loss when saving model checkpoints.
+            best_val_loss = float(match.group(3))
+
+            checkpoint = torch.load(checkpoint_file, map_location=device)
+
+            model = GPTModel(cfg)
+            model = torch.compile(model)
+            model.load_state_dict(checkpoint["model_state_dict"])
+            model.to(device).to(torch.bfloat16)
+
+            optimizer = torch.optim.AdamW(
+                model.parameters(), weight_decay=cfg.weight_decay
+            )
+            optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        else:
+            print(f"failed to parse checkpoint file {checkpoint_file}", file=sys.stderr)
+            quit(1)
+    else:
+        resume_epoch = 0
+        global_step = -1
+        # Keep track of best validation loss when saving model checkpoints.
+        best_val_loss = float("inf")
+
+        model = GPTModel(cfg)
+        model = torch.compile(model)
+        model.to(device).to(torch.bfloat16)
+
+        optimizer = torch.optim.AdamW(model.parameters(), weight_decay=cfg.weight_decay)
 
     total_tokens, last_tokens = 0, 0
     cumulative_tokens, cumulative_time = 0.0, 0.0
 
     # Total training iterations.
-    n_steps = len(train_loader) * cfg.n_epoch
+    n_steps = len(train_loader) * cfg.n_epoch - resume_epoch
     n_warmup = int(0.1 * n_steps)
 
     # Learning rate linear warmup stabilizes training by gradually increasing
     # the learning rate from an initial value to a peak during "warmup" phase.
     lr_increment = (cfg.lr_peak - cfg.lr_init) / n_warmup
-
-    # Keep track of best validation loss when saving model checkpoints.
-    best_val_loss = float("inf")
 
     use_cuda = device.type == "cuda"
 
@@ -71,10 +103,16 @@ def train_model():
         # Start the timer for the first interval.
         t0 = time.time()
 
-    # Clear initialized gradients so they can be accumulated.
-    optimizer.zero_grad()
+    # Not zeroing gradients if resuming.
+    if not checkpoint_file:
+        # Clear initialized gradients so they can be accumulated.
+        optimizer.zero_grad()
+    else:
+        print(
+            f"[Resuming training] epoch: {resume_epoch+1}, step: {global_step:06d}, val_loss: {best_val_loss:.3f}\n"
+        )
 
-    for epoch in range(cfg.n_epoch):
+    for epoch in range(resume_epoch, cfg.n_epoch):
         model.train()
 
         for input_batch, target_batch in train_loader:
@@ -186,7 +224,7 @@ def train_model():
         "checkpoints/final_model.pth",
     )
 
-    print("Saved final_model")
+    print("Training complete: 'final_model.pth' saved")
 
 
 def calc_loss_batch(input_batch, target_batch, model, device):
@@ -309,4 +347,13 @@ def generate(
 
 
 if __name__ == "__main__":
-    train_model()
+    parser = argparse.ArgumentParser(description="GPT Model Training")
+    parser.add_argument(
+        "--file",
+        type=str,
+        help="resumes training given a model checkpoint file",
+    )
+
+    args = parser.parse_args()
+
+    train_model(args)

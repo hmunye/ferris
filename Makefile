@@ -6,7 +6,7 @@ run:
 	@uv run src/main.py
 
 train:
-	@uv run src/train.py
+	@uv run src/train.py $(ARGS)
 
 lint:
 	@uvx ruff check src/
