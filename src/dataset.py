@@ -88,7 +88,6 @@ class GPTDataset(Dataset):
 
 def prepare_data_loaders(cfg, tokenizer, cache_dir="dataset/openwebtext2_tokenized"):
     if os.path.exists(cache_dir):
-        print("Loading tokenized dataset from disk...")
         dataset = load_from_disk(cache_dir)
     else:
         dataset = load_dataset("Geralt-Targaryen/openwebtext2", split="train")

@@ -105,11 +105,12 @@ def train_model(args):
 
     # Not zeroing gradients if resuming.
     if not checkpoint_file:
+        print("Starting training...")
         # Clear initialized gradients so they can be accumulated.
         optimizer.zero_grad()
     else:
         print(
-            f"[Resuming training] epoch: {resume_epoch+1}, step: {global_step:06d}, val_loss: {best_val_loss:.3f}\n"
+            f"Resuming training with epoch: {resume_epoch+1}, step: {global_step:06d}, best_val_loss: {best_val_loss:.3f}\n"
         )
 
     for epoch in range(resume_epoch, cfg.n_epoch):
@@ -137,7 +138,8 @@ def train_model(args):
             # Calculate loss gradients.
             loss.backward()
 
-            # Apply gradient clipping to avoid exploding gradients.
+            # Apply gradient clipping each iteration to avoid exploding
+            # gradients.
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 
             # Update model weights using loss gradients with gradient
@@ -202,18 +204,19 @@ def train_model(args):
                     )
                     best_val_loss = val_loss
 
-        # Print sample output after each epoch.
-        print_sample(model, tokenizer, device, "Every effort moves you")
+            if global_step % cfg.sample_freq == 0:
+                # Print sample output for observation.
+                print_sample(model, tokenizer, device, "Every effort moves you", cfg)
 
-        # Print memory stats after each epoch.
-        if torch.cuda.is_available():
-            device = torch.cuda.current_device()
+                # Print GPU memory stats if available.
+                if torch.cuda.is_available():
+                    device = torch.cuda.current_device()
 
-            allocated_gb = torch.cuda.memory_allocated(device) / 1024**3
-            reserved_gb = torch.cuda.memory_reserved(device) / 1024**3
+                    allocated_gb = torch.cuda.memory_allocated(device) / 1024**3
+                    reserved_gb = torch.cuda.memory_reserved(device) / 1024**3
 
-            print(f"Allocated memory: {allocated_gb:.4f} GB")
-            print(f"Reserved memory: {reserved_gb:.4f} GB\n")
+                    print(f"Allocated memory: {allocated_gb:.4f} GB")
+                    print(f"Reserved memory: {reserved_gb:.4f} GB\n")
 
     # Save the final model and optimizer parameters.
     torch.save(
@@ -276,7 +279,7 @@ def evaluate_model(model, train_loader, val_loader, device, eval_iter):
     return train_loss, val_loss
 
 
-def print_sample(model, tokenizer, device, start_ctx):
+def print_sample(model, tokenizer, device, start_ctx, cfg):
     # Disables dropout.
     model.eval()
 
@@ -290,13 +293,13 @@ def print_sample(model, tokenizer, device, start_ctx):
             idx=encoded,
             max_new_tokens=50,
             context_size=context_size,
-            temp=1.4,
-            top_k=25,
+            temp=cfg.temp,
+            top_k=cfg.top_k,
         )
 
     # Print in compacted format, replacing newlines.
-    decoded_text = decode_tokens(token_ids, tokenizer).replace("\n", " ")
-    print(f"{decoded_text}\n")
+    decoded_text = decode_tokens(token_ids, tokenizer).replace("\n", "\\n")
+    print(f"Sample generation: {decoded_text}\n")
 
     model.train()
 
