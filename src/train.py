@@ -16,7 +16,7 @@ def train_model(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     print(f"PyTorch version: {torch.__version__}")
-    print(f"Using device: {device}")
+    print(f"Using device: '{device}'")
 
     if torch.cuda.is_available():
         print(f"CUDA version: {torch.version.cuda}")
@@ -65,7 +65,7 @@ def train_model(args):
             )
             optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         else:
-            print(f"failed to parse checkpoint file {checkpoint_file}", file=sys.stderr)
+            print(f"ERROR: Failed to parse checkpoint file '{checkpoint_file}'", file=sys.stderr)
             quit(1)
     else:
         resume_epoch = 0
@@ -105,7 +105,7 @@ def train_model(args):
 
     # Not zeroing gradients if resuming.
     if not checkpoint_file:
-        print("Starting training...")
+        print("Starting training...\n")
         # Clear initialized gradients so they can be accumulated.
         optimizer.zero_grad()
     else:
@@ -200,23 +200,13 @@ def train_model(args):
                     )
 
                     print(
-                        f"Saved model_epoch_{epoch+1}_step_{global_step:06d}_val_loss_{val_loss:.3f}"
+                        f"Saved checkpoint: model_epoch_{epoch+1}_step_{global_step:06d}_val_loss_{val_loss:.3f}"
                     )
                     best_val_loss = val_loss
 
             if global_step % cfg.sample_freq == 0:
                 # Print sample output for observation.
-                print_sample(model, tokenizer, device, "Every effort moves you", cfg)
-
-                # Print GPU memory stats if available.
-                if torch.cuda.is_available():
-                    device = torch.cuda.current_device()
-
-                    allocated_gb = torch.cuda.memory_allocated(device) / 1024**3
-                    reserved_gb = torch.cuda.memory_reserved(device) / 1024**3
-
-                    print(f"Allocated memory: {allocated_gb:.4f} GB")
-                    print(f"Reserved memory: {reserved_gb:.4f} GB\n")
+                print_sample(model, tokenizer, device, "But I think I don't like", cfg)
 
     # Save the final model and optimizer parameters.
     torch.save(
@@ -224,10 +214,10 @@ def train_model(args):
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
         },
-        "checkpoints/final_model.pth",
+        "checkpoints/final_model_owt.pth",
     )
 
-    print("Training complete: 'final_model.pth' saved")
+    print("Training complete: 'final_model_owt.pth' saved")
 
 
 def calc_loss_batch(input_batch, target_batch, model, device):
@@ -299,7 +289,7 @@ def print_sample(model, tokenizer, device, start_ctx, cfg):
 
     # Print in compacted format, replacing newlines.
     decoded_text = decode_tokens(token_ids, tokenizer).replace("\n", "\\n")
-    print(f"Sample generation: {decoded_text}\n")
+    print(f"\nSample generation: {decoded_text}\n")
 
     model.train()
 

@@ -24,7 +24,7 @@ class GPTDataset(Dataset):
         target_file = os.path.join(mmap_dir, "target_ids.npy")
 
         if os.path.exists(input_file) and os.path.exists(target_file):
-            print(f"Loading pre-processed dataset '{split}' from disk...")
+            print(f"Loading pre-processed mmap dataset '{split}' from disk...")
             self.input_ids = np.memmap(
                 input_file,
                 dtype=np.int32,
@@ -104,6 +104,7 @@ def prepare_data_loaders(cfg, tokenizer, cache_dir="dataset/openwebtext2_tokeniz
 
     token_ids = dataset["token_ids"]
 
+    # 90/10 dataset split.
     train_size = int(0.9 * len(token_ids))
 
     train_dataset = GPTDataset(

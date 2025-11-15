@@ -19,7 +19,7 @@ class GPTConfig:
 
     eval_freq: int = 5000  # steps before model evaluation (train/val loss)
     eval_iter: int = 200  # batches to compute train/val loss over
-    sample_freq: int = 10000  # steps before sample text generation
+    sample_freq: int = 15000  # steps before sample text generation
 
     lr_init: float = 3e-5  # initial learning rate
     lr_peak: float = 5e-4  # peak learning rate for warmup
@@ -29,7 +29,7 @@ class GPTConfig:
     temp: float = 1.4  # softmax temperature (higher = more random)
     top_k: int = 25  # top-k filtering during generation
 
-    n_workers: int = 16  # data loader workers for training dataset
+    n_workers: int = 18  # data loader workers for training dataset
     n_val_workers: int = 8  # data loader workers for validation dataset
 
 
