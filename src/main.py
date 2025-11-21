@@ -10,7 +10,10 @@ from config import cfg
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    checkpoint = torch.load("checkpoints/model.pth", map_location=device)
+    checkpoint = torch.load(
+        "checkpoints/foundation_model.pth",
+        map_location=device,
+    )
 
     if torch.cuda.is_available():
         capability = torch.cuda.get_device_capability()

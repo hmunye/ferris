@@ -33,12 +33,12 @@ def train_model(args):
 
     tokenizer = tiktoken.get_encoding("gpt2")
 
-    print(f"Using {cfg.n_workers} worker procs for training loader")
-    print(f"Using {cfg.n_val_workers} worker procs for validation loader")
+    print(f"\nUsing {cfg.n_workers} worker procs for training loader")
+    print(f"Using {cfg.n_val_workers} worker procs for validation loader\n")
 
     print("Preparing data loaders...")
     train_loader, val_loader = prepare_data_loaders(cfg=cfg, tokenizer=tokenizer)
-    print("Data loaders prepared")
+    print("Data loaders prepared\n")
 
     # Determine if training is being resumed.
     checkpoint_file = args.file
@@ -65,7 +65,10 @@ def train_model(args):
             )
             optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         else:
-            print(f"ERROR: Failed to parse checkpoint file '{checkpoint_file}'", file=sys.stderr)
+            print(
+                f"ERROR: Failed to parse checkpoint file '{checkpoint_file}'",
+                file=sys.stderr,
+            )
             quit(1)
     else:
         resume_epoch = 0
@@ -110,7 +113,7 @@ def train_model(args):
         optimizer.zero_grad()
     else:
         print(
-            f"Resuming training with epoch: {resume_epoch+1}, step: {global_step:06d}, best_val_loss: {best_val_loss:.3f}\n"
+            f"Resuming training with epoch: {resume_epoch+1}, step: {global_step:07d}, best_val_loss: {best_val_loss:.3f}\n"
         )
 
     for epoch in range(resume_epoch, cfg.n_epoch):
@@ -184,7 +187,7 @@ def train_model(args):
                 )
 
                 print(
-                    f"Ep {epoch+1}, Step {global_step:06d}, "
+                    f"Ep {epoch+1}, Step {global_step:07d}, "
                     f"Train: {train_loss:.3f}, Val: {val_loss:.3f}, "
                     f"Step tok/sec: {round(tps)}, Avg tok/sec: {round(avg_tps)}"
                 )
@@ -196,11 +199,11 @@ def train_model(args):
                             "model_state_dict": model.state_dict(),
                             "optimizer_state_dict": optimizer.state_dict(),
                         },
-                        f"checkpoints/model_epoch_{epoch+1}_step_{global_step:06d}_val_loss_{val_loss:.3f}.pth",
+                        f"checkpoints/model_epoch_{epoch+1}_step_{global_step:07d}_val_loss_{val_loss:.3f}.pth",
                     )
 
                     print(
-                        f"Saved checkpoint: model_epoch_{epoch+1}_step_{global_step:06d}_val_loss_{val_loss:.3f}"
+                        f"Saved checkpoint: model_epoch_{epoch+1}_step_{global_step:07d}_val_loss_{val_loss:.3f}"
                     )
                     best_val_loss = val_loss
 

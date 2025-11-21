@@ -17,9 +17,9 @@ class GPTConfig:
         4  # gradient accumulation steps (16 * 4 = 64 effective batch size)
     )
 
-    eval_freq: int = 5000  # steps before model evaluation (train/val loss)
+    eval_freq: int = 10000  # steps before model evaluation (train/val loss)
     eval_iter: int = 200  # batches to compute train/val loss over
-    sample_freq: int = 15000  # steps before sample text generation
+    sample_freq: int = 20000  # steps before sample text generation
 
     lr_init: float = 3e-5  # initial learning rate
     lr_peak: float = 5e-4  # peak learning rate for warmup
