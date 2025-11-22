@@ -1,7 +1,9 @@
 import os
+import json
 import numpy as np
 import torch
 
+from functools import partial
 from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
 from datasets import load_dataset, load_from_disk
@@ -146,3 +148,136 @@ def prepare_data_loaders(cfg, tokenizer, cache_dir="dataset/openwebtext2_tokeniz
     )
 
     return train_loader, val_loader
+
+
+class InstructionDataset(Dataset):
+    def __init__(self, data, tokenizer, data_source):
+        self.data = data
+        self.encoded_texts = []
+
+        # Pretokenize all entries.
+        for entry in data:
+            # Prepare LIMA dataset separately.
+            if data_source == "lima":
+                entry = entry["conversations"]
+                instruction_input_response = (
+                    format_input(entry[0]) + f"\n\n### Response:\n{entry[1]}"
+                )
+            else:
+                # Alpaca GPT-4 dataset includes "text" key which is already
+                # formatted.
+                instruction_input_response = entry["text"]
+
+            self.encoded_texts.append(tokenizer.encode(instruction_input_response))
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        return self.encoded_texts[idx]
+
+
+def collate_fn(
+    batch, pad_token_id=50256, ignore_idx=-100, allowed_max_len=None, device="cpu"
+):
+    batch_max_len = max(len(item) + 1 for item in batch)
+    inputs, targets = [], []
+
+    for item in batch:
+        new_item = item.copy()
+        new_item += [pad_token_id]
+
+        padded = new_item + [pad_token_id] * (batch_max_len - len(new_item))
+
+        input = torch.tensor(padded[:-1])
+        target = torch.tensor(padded[1:])
+
+        mask = target == pad_token_id
+        indices = torch.nonzero(mask).squeeze()
+
+        # Mask `EOT` token IDs so training loss is not affected.
+        if indices.numel() > 1:
+            target[indices[1:]] = ignore_idx
+
+        # Optionally truncate if given a maximum sequence length.
+        if allowed_max_len is not None:
+            input = input[:allowed_max_len]
+            target = target[:allowed_max_len]
+
+        inputs.append(input)
+        targets.append(target)
+
+    # If using `n_workers` > 0, move inputs and targets to device within
+    # training loop instead of here.
+    inputs_tensor = torch.stack(inputs).to(device)
+    targets_tensor = torch.stack(targets).to(device)
+
+    return inputs_tensor, targets_tensor
+
+
+def prepare_instruct_data_loaders(
+    cfg,
+    tokenizer,
+    file_path,
+    eos_id,
+    device="cpu",
+    allowed_max_len=1024,
+    data_source="",
+):
+    with open(file_path, "r", encoding="utf-8") as f:
+        dataset = [json.loads(line.strip()) for line in f]
+
+    print(f"Loaded {len(dataset)} samples from '{file_path}'")
+
+    init_collate_fn = partial(
+        collate_fn, pad_token_id=eos_id, device=device, allowed_max_len=allowed_max_len
+    )
+
+    train_size = int(len(dataset) * 0.85)
+    test_size = int(len(dataset) * 0.1)
+
+    train_data = dataset[:train_size]
+    test_data = dataset[train_size : train_size + test_size]
+    val_data = dataset[train_size + test_size :]
+
+    train_dataset = InstructionDataset(train_data, tokenizer, data_source)
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=cfg.n_batch,
+        drop_last=True,
+        shuffle=True,
+        num_workers=cfg.n_workers,
+        collate_fn=init_collate_fn,
+    )
+
+    test_dataset = InstructionDataset(test_data, tokenizer, data_source)
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=cfg.n_batch,
+        drop_last=False,
+        shuffle=False,
+        num_workers=cfg.n_workers,
+        collate_fn=init_collate_fn,
+    )
+
+    val_dataset = InstructionDataset(val_data, tokenizer, data_source)
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=cfg.n_batch,
+        drop_last=False,
+        shuffle=False,
+        num_workers=cfg.n_workers,
+        collate_fn=init_collate_fn,
+    )
+
+    return train_loader, test_loader, val_loader
+
+
+def format_input(entry):
+    instruction_text = (
+        f"Below is an instruction that describes a task. "
+        f"Write a response that appropriately completes the request."
+        f"\n\n### Instruction:\n{entry}"
+    )
+
+    return instruction_text

@@ -4,14 +4,19 @@ import time
 
 from transformer import GPTModel
 from util import encode_text, decode_tokens
-from config import cfg
+from config import pt_cfg as cfg
 
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # Apple Silicon.
+    if torch.backends.mps.is_available():
+        device = torch.device("mps")
+
+    print(f"Using device: '{device}'")
 
     checkpoint = torch.load(
-        "checkpoints/foundation_model.pth",
+        "fine_tuned/model_instruct.pth",
         map_location=device,
     )
 
@@ -31,15 +36,14 @@ def main():
     tokenizer = tiktoken.get_encoding("gpt2")
 
     eos_id = tokenizer.eot_token
-    max_new_tokens = 30
+    max_new_tokens = 100
 
     model.eval()
 
     while True:
         try:
-            prompt = input("prompt: ")
+            prompt = get_multi_line_input()
             idx = encode_text(prompt, tokenizer).to(device)
-            print(f"output: {prompt}", sep="", end="")
 
             # Disable gradient tracking.
             with torch.inference_mode():
@@ -57,9 +61,7 @@ def main():
                         break
                     else:
                         decoded_text = decode_tokens(token_id, tokenizer)
-
                         print(decoded_text, sep="", end="", flush=True)
-
                         # Append the predicted token to the input.
                         idx = torch.cat((idx, token_id), dim=-1)
 
@@ -68,6 +70,21 @@ def main():
             print()
         except (EOFError, KeyboardInterrupt):
             break
+
+
+def get_multi_line_input():
+    print("Enter your prompt (enter 'DONE' on a new line to finish):")
+    lines = []
+
+    while True:
+        line = input()
+
+        if line.strip().lower() == "done":
+            break
+
+        lines.append(line)
+
+    return "\n".join(lines)
 
 
 def generate_next_token(model, idx, context_size, temp=0.0, top_k=None, eos_id=None):

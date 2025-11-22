@@ -1,6 +1,7 @@
 .ruff_cache/
 checkpoints/
 dataset/
+fine_tuned/
 
 # Python-generated files
 __pycache__/

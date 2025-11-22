@@ -9,11 +9,14 @@ import argparse
 from dataset import prepare_data_loaders
 from transformer import GPTModel
 from util import encode_text, decode_tokens
-from config import cfg
+from config import pt_cfg as cfg
 
 
 def train_model(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # Apple Silicon.
+    if torch.backends.mps.is_available():
+        device = torch.device("mps")
 
     print(f"PyTorch version: {torch.__version__}")
     print(f"Using device: '{device}'")
