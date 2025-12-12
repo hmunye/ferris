@@ -22,10 +22,10 @@ clean:
 
 help:
 	@echo "Available targets:"
-	@echo "  run      - Run the model inference script"
-	@echo "  train    - Run the model pretraining script"
-	@echo "  ift      - Run the model instruction fine-tuning script"
-	@echo "  lint     - Run the linter against scripts within src/"
-	@echo "  fmt      - Run the formatter against scripts within src/"
-	@echo "  clean    - Remove all generated files and directories"
-	@echo "  help     - Show this help message"
+	@echo "  run   (ARGS)      - Run the model inference script"
+	@echo "  train (ARGS)      - Run the model pretraining script"
+	@echo "  ift   (ARGS)      - Run the model instruction fine-tuning script"
+	@echo "  lint              - Run the linter against scripts within src/"
+	@echo "  fmt               - Run the formatter against scripts within src/"
+	@echo "  clean             - Remove all generated files and directories"
+	@echo "  help              - Show this help message"

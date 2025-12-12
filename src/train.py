@@ -36,8 +36,9 @@ def train_model(args):
 
     tokenizer = tiktoken.get_encoding("gpt2")
 
-    print(f"\nUsing {cfg.n_workers} worker procs for training loader")
-    print(f"Using {cfg.n_val_workers} worker procs for validation loader\n")
+    print(
+        f"\nUsing {cfg.n_workers + cfg.n_val_workers} worker procs for data loaders\n"
+    )
 
     print("Preparing data loaders...")
     train_loader, val_loader = prepare_data_loaders(cfg=cfg, tokenizer=tokenizer)

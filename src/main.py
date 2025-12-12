@@ -48,11 +48,7 @@ def main(args):
         try:
             print("❯ ", end="", flush=True)
             prompt = input()
-            instruction_text = (
-                f"Below is an instruction that describes a task."
-                f"Write a response that appropriately completes the request."
-                f"\n\n### Instruction:\n{prompt}"
-            )
+            instruction_text = f"\n\n### Instruction:\n{prompt}"
 
             encoded = encode_text(instruction_text, tokenizer).to(device)
 
@@ -63,8 +59,8 @@ def main(args):
                         model=model,
                         idx=encoded,
                         context_size=cfg.n_ctx,
-                        top_k=cfg.top_k,
-                        temp=cfg.temp,
+                        top_k=20,
+                        temp=0.5,
                         eos_id=eos_id,
                     )
 

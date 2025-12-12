@@ -171,6 +171,27 @@ class InstructionDataset(Dataset):
                             formatted_text, allowed_special={"<|endoftext|>"}
                         )
                     )
+            elif data_source == "concat":
+                if "conversations" in entry:
+                    conversations = entry["conversations"]
+                    for i in range(0, len(conversations) - 1, 2):
+                        instruction = conversations[i]
+                        response = conversations[i + 1]
+                        formatted_text = format_instruction_response(
+                            instruction, response
+                        )
+
+                        self.encoded_texts.append(
+                            tokenizer.encode(
+                                formatted_text, allowed_special={"<|endoftext|>"}
+                            )
+                        )
+                else:
+                    self.encoded_texts.append(
+                        tokenizer.encode(
+                            entry["text"], allowed_special={"<|endoftext|>"}
+                        )
+                    )
             else:
                 # Alpaca GPT-4 dataset includes "text" key which is already
                 # formatted correctly.
@@ -185,13 +206,43 @@ class InstructionDataset(Dataset):
         return self.encoded_texts[idx]
 
 
-def collate_fn(batch, pad_token_id, device, ignore_idx=-100, allowed_max_len=None):
-    batch_max_len = max(len(item) + 1 for item in batch)
+def instruct_collate_fn(
+    batch, pad_token_id, device, ignore_idx=-100, allowed_max_len=None
+):
+    packed_sequences = []
+
+    current_pack = []
+    current_len = 0
+
+    for seq in batch:
+        seq_len = len(seq)
+
+        if seq_len + current_len <= allowed_max_len:
+            current_pack.extend(seq)
+            current_len += seq_len
+        else:
+            if current_pack:
+                packed_sequences.append(current_pack)
+
+            if seq_len > allowed_max_len:
+                for i in range(0, seq_len, allowed_max_len):
+                    packed_sequences.append(seq[i : i + allowed_max_len])
+
+                current_pack = []
+                current_len = 0
+            else:
+                current_pack = list(seq)
+                current_len = seq_len
+
+    if current_pack:
+        packed_sequences.append(current_pack)
+
+    batch_max_len = max(len(item) + 1 for item in packed_sequences)
     inputs, targets = [], []
 
-    for item in batch:
-        new_item = item.copy()
-        new_item += [pad_token_id]
+    for item in packed_sequences:
+        new_item = list(item)
+        new_item.append(pad_token_id)
 
         padded = new_item + [pad_token_id] * (batch_max_len - len(new_item))
 
@@ -204,11 +255,6 @@ def collate_fn(batch, pad_token_id, device, ignore_idx=-100, allowed_max_len=Non
         # Mask padding token IDs so training loss is not affected.
         if indices.numel() > 1:
             target[indices[1:]] = ignore_idx
-
-        # Optionally truncate if given a maximum sequence length.
-        if allowed_max_len is not None:
-            input = input[:allowed_max_len]
-            target = target[:allowed_max_len]
 
         inputs.append(input)
         targets.append(target)
@@ -234,7 +280,10 @@ def prepare_instruct_data_loaders(
     print(f"Loaded {len(dataset)} samples from '{file_path}'")
 
     init_collate_fn = partial(
-        collate_fn, pad_token_id=eos_id, device=device, allowed_max_len=allowed_max_len
+        instruct_collate_fn,
+        pad_token_id=eos_id,
+        device=device,
+        allowed_max_len=allowed_max_len,
     )
 
     train_size = int(len(dataset) * 0.90)

@@ -26,8 +26,8 @@ class PreTrainConfig:
     lr_min: float = 3e-5  # minimum learning rate for cosine decay
     weight_decay: float = 0.01  # L2 regularization
 
-    rank: int = 16  # dimensionality of the low-rank approximation
-    alpha: int = 16  # scaling factor for controlling magnitude of weight update
+    rank: int = 32  # dimensionality of the low-rank approximation
+    alpha: int = 32  # scaling factor for controlling magnitude of weight update
 
     temp: float = 1.4  # softmax temperature (higher = more random)
     top_k: int = 25  # top-k filtering during generation
@@ -49,25 +49,26 @@ class FineTuningConfig:
     n_epoch: int = 10  # total epochs (iterations over train dataset)
     n_batch: int = 16  # batch size per iteration
     n_grad_acc: int = (
-        4  # gradient accumulation steps (16 * 4 = 64 effective batch size)
+        5  # gradient accumulation steps (16 * 5 = 80 effective batch size)
     )
 
-    eval_freq: int = 10  # steps before model evaluation (train/val loss)
+    eval_freq: int = 50  # steps before model evaluation (train/val loss)
     eval_iter: int = 200  # batches to compute train/val loss over
     sample_freq: int = 250  # steps before sample text generation
 
-    lr_init: float = 2e-5  # initial learning rate
-    lr_peak: float = 5e-5  # peak learning rate for warmup
-    lr_min: float = 1e-5  # minimum learning rate for cosine decay
+    lr_init: float = 5e-6  # initial learning rate
+    lr_peak: float = 1e-5  # peak learning rate for warmup
+    lr_min: float = 3e-6  # minimum learning rate for cosine decay
     weight_decay: float = 0.01  # L2 regularization
 
-    rank: int = 16  # dimensionality of the low-rank approximation
-    alpha: int = 16  # scaling factor for controlling magnitude of weight update
+    rank: int = 32  # dimensionality of the low-rank approximation
+    alpha: int = 32  # scaling factor for controlling magnitude of weight update
 
     temp: float = 1.0  # softmax temperature (higher = more random)
     top_k: int = 25  # top-k filtering during generation
 
     n_workers: int = 0  # data loader workers for training dataset
+    n_test_workers: int = 0  # data loader workers for test dataset
     n_val_workers: int = 0  # data loader workers for validation dataset
 
 
