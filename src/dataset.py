@@ -157,18 +157,26 @@ class InstructionDataset(Dataset):
 
         # Pretokenize all entries.
         for entry in data:
-            # Prepare LIMA dataset separately.
+            # Prepare LIMA dataset separately. May contain multi-turn
+            # conversations.
             if data_source == "lima":
-                entry = entry["conversations"]
-                instruction_input_response = (
-                    format_input(entry[0]) + f"\n\n### Response:\n{entry[1]}"
-                )
+                conversations = entry["conversations"]
+                for i in range(0, len(conversations) - 1, 2):
+                    instruction = conversations[i]
+                    response = conversations[i + 1]
+                    formatted_text = format_instruction_response(instruction, response)
+
+                    self.encoded_texts.append(
+                        tokenizer.encode(
+                            formatted_text, allowed_special={"<|endoftext|>"}
+                        )
+                    )
             else:
                 # Alpaca GPT-4 dataset includes "text" key which is already
-                # formatted.
-                instruction_input_response = entry["text"]
-
-            self.encoded_texts.append(tokenizer.encode(instruction_input_response))
+                # formatted correctly.
+                self.encoded_texts.append(
+                    tokenizer.encode(entry["text"], allowed_special={"<|endoftext|>"})
+                )
 
     def __len__(self):
         return len(self.data)
@@ -177,9 +185,7 @@ class InstructionDataset(Dataset):
         return self.encoded_texts[idx]
 
 
-def collate_fn(
-    batch, pad_token_id=50256, ignore_idx=-100, allowed_max_len=None, device="cpu"
-):
+def collate_fn(batch, pad_token_id, device, ignore_idx=-100, allowed_max_len=None):
     batch_max_len = max(len(item) + 1 for item in batch)
     inputs, targets = [], []
 
@@ -195,7 +201,7 @@ def collate_fn(
         mask = target == pad_token_id
         indices = torch.nonzero(mask).squeeze()
 
-        # Mask `EOT` token IDs so training loss is not affected.
+        # Mask padding token IDs so training loss is not affected.
         if indices.numel() > 1:
             target[indices[1:]] = ignore_idx
 
@@ -207,8 +213,6 @@ def collate_fn(
         inputs.append(input)
         targets.append(target)
 
-    # If using `n_workers` > 0, move inputs and targets to device within
-    # training loop instead of here.
     inputs_tensor = torch.stack(inputs).to(device)
     targets_tensor = torch.stack(targets).to(device)
 
@@ -233,12 +237,10 @@ def prepare_instruct_data_loaders(
         collate_fn, pad_token_id=eos_id, device=device, allowed_max_len=allowed_max_len
     )
 
-    train_size = int(len(dataset) * 0.85)
-    test_size = int(len(dataset) * 0.1)
+    train_size = int(len(dataset) * 0.90)
 
     train_data = dataset[:train_size]
-    test_data = dataset[train_size : train_size + test_size]
-    val_data = dataset[train_size + test_size :]
+    val_data = dataset[train_size:]
 
     train_dataset = InstructionDataset(train_data, tokenizer, data_source)
     train_loader = DataLoader(
@@ -250,34 +252,24 @@ def prepare_instruct_data_loaders(
         collate_fn=init_collate_fn,
     )
 
-    test_dataset = InstructionDataset(test_data, tokenizer, data_source)
-    test_loader = DataLoader(
-        test_dataset,
-        batch_size=cfg.n_batch,
-        drop_last=False,
-        shuffle=False,
-        num_workers=cfg.n_workers,
-        collate_fn=init_collate_fn,
-    )
-
     val_dataset = InstructionDataset(val_data, tokenizer, data_source)
     val_loader = DataLoader(
         val_dataset,
         batch_size=cfg.n_batch,
         drop_last=False,
         shuffle=False,
-        num_workers=cfg.n_workers,
+        num_workers=cfg.n_val_workers,
         collate_fn=init_collate_fn,
     )
 
-    return train_loader, test_loader, val_loader
+    return train_loader, val_loader
 
 
-def format_input(entry):
-    instruction_text = (
+def format_instruction_response(instruction, response):
+    formatted = (
         f"Below is an instruction that describes a task. "
         f"Write a response that appropriately completes the request."
-        f"\n\n### Instruction:\n{entry}"
+        f"\n\n### Instruction:\n{instruction}"
+        f"\n\n### Response:\n{response}"
     )
-
-    return instruction_text
+    return formatted

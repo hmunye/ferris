@@ -8,7 +8,7 @@ from dataset import prepare_instruct_data_loaders
 from train import calc_loss_batch, evaluate_model, generate
 from util import encode_text, decode_tokens
 from config import ft_cfg as cfg
-from transformer import GPTModel
+from transformer import GPTModel, replace_linear_with_lora
 
 
 def ift(args):
@@ -40,25 +40,31 @@ def ift(args):
     tokenizer = tiktoken.get_encoding("gpt2")
     eos_id = tokenizer.eot_token
 
+    source = ""
     if "lima" in args.source:
         source = "lima"
-    else:
-        source = ""
 
-    train_loader, test_loader, val_loader = prepare_instruct_data_loaders(
+    train_loader, val_loader = prepare_instruct_data_loaders(
         cfg,
         tokenizer,
         args.source,
         eos_id,
         device,
-        allowed_max_len=1024,
+        allowed_max_len=cfg.n_ctx,
         data_source=source,
     )
 
     print("Data loaders prepared\n")
 
-    # Determine if training is being resumed.
+    # Determine if further fine-tuning is being done.
     checkpoint_file = args.file
+
+    model = GPTModel(cfg)
+    model = torch.compile(model)
+
+    # Freeze original model parameters.
+    for param in model.parameters():
+        param.requires_grad = False
 
     if checkpoint_file:
         print("Fine-tuning existing model...")
@@ -66,19 +72,28 @@ def ift(args):
             checkpoint_file,
             map_location=device,
         )
+        # Using LoRA for fine-tuning, which results in less trainable parameters,
+        # while not affecting the current model's weights.
+        replace_linear_with_lora(model, cfg.rank, cfg.alpha)
+
+        model.load_state_dict(checkpoint["model_state_dict"])
     else:
         print("Fine-tuning foundation model...")
         checkpoint = torch.load(
             "checkpoints/foundation_model.pth",
             map_location=device,
         )
+        model.load_state_dict(checkpoint["model_state_dict"])
 
-    model = GPTModel(cfg)
-    model = torch.compile(model)
-    model.load_state_dict(checkpoint["model_state_dict"])
+        # Using LoRA for fine-tuning, which results in less trainable parameters,
+        # while not affecting the current model's weights.
+        replace_linear_with_lora(model, cfg.rank, cfg.alpha)
+
     model.to(device).to(torch.bfloat16)
 
-    optimizer = torch.optim.AdamW(model.parameters(), weight_decay=cfg.weight_decay)
+    optimizer = torch.optim.AdamW(
+        model.parameters(), lr=cfg.lr_init, weight_decay=cfg.weight_decay
+    )
 
     global_step = -1
     total_tokens, last_tokens = 0, 0
@@ -186,9 +201,9 @@ def ift(args):
 
             if global_step % cfg.sample_freq == 0:
                 instruction_text = (
-                    "Below is an instruction that describes a task. "
+                    "Below is an instruction that describes a task."
                     "Write a response that appropriately completes the request."
-                    "\n\n### Instruction:\nGive three tips for staying healthy."
+                    "\n\n### Instruction:\nHello, how are you?"
                 )
                 # Print sample output for observation.
                 print_sample(model, tokenizer, device, instruction_text, cfg)
@@ -222,7 +237,7 @@ def print_sample(model, tokenizer, device, start_ctx, cfg):
         token_ids = generate(
             model=model,
             idx=encoded,
-            max_new_tokens=50,
+            max_new_tokens=35,
             context_size=context_size,
             temp=cfg.temp,
             top_k=cfg.top_k,
@@ -230,16 +245,12 @@ def print_sample(model, tokenizer, device, start_ctx, cfg):
 
     decoded_text = decode_tokens(token_ids, tokenizer)
     response_text = decoded_text[len(start_ctx) :].strip()
-    print(f"\nSample generation: {response_text}\n")
+    print(f"\nSample response: {response_text}\n")
 
     model.train()
 
 
 if __name__ == "__main__":
-    # If using `n_workers` > 0.
-    #
-    # torch.multiprocessing.set_start_method("spawn", force=True)
-
     parser = argparse.ArgumentParser(description="GPT Model Fine-Tuning")
 
     parser.add_argument(
@@ -251,12 +262,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--file",
         type=str,
-        help="path to the model checkpoint file for resuming fine-tuning (optional).",
+        help="path to the model checkpoint file for resuming fine-tuning",
     )
     parser.add_argument(
         "--output",
         type=str,
-        help="path to save the fine-tuned model (optional).",
+        help="path to save the fine-tuned model",
     )
 
     args = parser.parse_args()

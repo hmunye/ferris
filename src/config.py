@@ -26,6 +26,9 @@ class PreTrainConfig:
     lr_min: float = 3e-5  # minimum learning rate for cosine decay
     weight_decay: float = 0.01  # L2 regularization
 
+    rank: int = 16  # dimensionality of the low-rank approximation
+    alpha: int = 16  # scaling factor for controlling magnitude of weight update
+
     temp: float = 1.4  # softmax temperature (higher = more random)
     top_k: int = 25  # top-k filtering during generation
 
@@ -51,17 +54,21 @@ class FineTuningConfig:
 
     eval_freq: int = 10  # steps before model evaluation (train/val loss)
     eval_iter: int = 200  # batches to compute train/val loss over
-    sample_freq: int = 500  # steps before sample text generation
+    sample_freq: int = 250  # steps before sample text generation
 
     lr_init: float = 2e-5  # initial learning rate
     lr_peak: float = 5e-5  # peak learning rate for warmup
     lr_min: float = 1e-5  # minimum learning rate for cosine decay
     weight_decay: float = 0.01  # L2 regularization
 
+    rank: int = 16  # dimensionality of the low-rank approximation
+    alpha: int = 16  # scaling factor for controlling magnitude of weight update
+
     temp: float = 1.0  # softmax temperature (higher = more random)
     top_k: int = 25  # top-k filtering during generation
 
     n_workers: int = 0  # data loader workers for training dataset
+    n_val_workers: int = 0  # data loader workers for validation dataset
 
 
 pt_cfg = PreTrainConfig()

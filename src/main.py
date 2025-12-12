@@ -1,13 +1,14 @@
 import torch
 import tiktoken
 import time
+import argparse
 
-from transformer import GPTModel
+from transformer import GPTModel, replace_linear_with_lora
 from util import encode_text, decode_tokens
 from config import pt_cfg as cfg
 
 
-def main():
+def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # Apple Silicon.
     if torch.backends.mps.is_available():
@@ -16,7 +17,7 @@ def main():
     print(f"Using device: '{device}'")
 
     checkpoint = torch.load(
-        "fine_tuned/model_instruct.pth",
+        args.file,
         map_location=device,
     )
 
@@ -30,27 +31,37 @@ def main():
 
     model = GPTModel(cfg)
     model = torch.compile(model)
+
+    replace_linear_with_lora(model, cfg.rank, cfg.alpha)
+
     model.load_state_dict(checkpoint["model_state_dict"])
     model.to(device).to(torch.bfloat16)
 
     tokenizer = tiktoken.get_encoding("gpt2")
 
     eos_id = tokenizer.eot_token
-    max_new_tokens = 100
+    max_new_tokens = 1000
 
     model.eval()
 
     while True:
         try:
-            prompt = get_multi_line_input()
-            idx = encode_text(prompt, tokenizer).to(device)
+            print("❯ ", end="", flush=True)
+            prompt = input()
+            instruction_text = (
+                f"Below is an instruction that describes a task."
+                f"Write a response that appropriately completes the request."
+                f"\n\n### Instruction:\n{prompt}"
+            )
+
+            encoded = encode_text(instruction_text, tokenizer).to(device)
 
             # Disable gradient tracking.
             with torch.inference_mode():
                 for _ in range(max_new_tokens):
                     token_id = generate_next_token(
                         model=model,
-                        idx=idx,
+                        idx=encoded,
                         context_size=cfg.n_ctx,
                         top_k=cfg.top_k,
                         temp=cfg.temp,
@@ -63,28 +74,13 @@ def main():
                         decoded_text = decode_tokens(token_id, tokenizer)
                         print(decoded_text, sep="", end="", flush=True)
                         # Append the predicted token to the input.
-                        idx = torch.cat((idx, token_id), dim=-1)
+                        encoded = torch.cat((encoded, token_id), dim=-1)
 
                         time.sleep(0.01 * len(decoded_text))
 
             print()
         except (EOFError, KeyboardInterrupt):
             break
-
-
-def get_multi_line_input():
-    print("Enter your prompt (enter 'DONE' on a new line to finish):")
-    lines = []
-
-    while True:
-        line = input()
-
-        if line.strip().lower() == "done":
-            break
-
-        lines.append(line)
-
-    return "\n".join(lines)
 
 
 def generate_next_token(model, idx, context_size, temp=0.0, top_k=None, eos_id=None):
@@ -127,4 +123,13 @@ def generate_next_token(model, idx, context_size, temp=0.0, top_k=None, eos_id=N
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="GPT Model Inference")
+    parser.add_argument(
+        "--file",
+        type=str,
+        required=True,
+        help="path to the model file to run inference",
+    )
+
+    args = parser.parse_args()
+    main(args)

@@ -337,6 +337,8 @@ def generate(
             next_idx = torch.argmax(probs, dim=-1, keepdim=True)
 
         if next_idx == eos_id:
+            # Append the `EOT` token to the input before returning.
+            idx = torch.cat((idx, next_idx), dim=-1)
             break
 
         # Append the predicted token to the input.
